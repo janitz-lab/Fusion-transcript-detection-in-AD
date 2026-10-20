@@ -1,0 +1,18 @@
+#!/bin/bash
+
+#PBS -N STAR_Fusion
+#PBS -l select=1:ncpus=8:mem=80gb,walltime=11:59:00
+#PBS -j oe
+#PBS -m ae
+#PBS -M user@email.com
+#PBS -J 0-16
+
+PARAMS=(AD1 AD2 AD3 AD4 AD5 AD6 AD7 AD8 AD9 AD_control1 AD_control2 AD_control3 AD_control4 AD_control5 AD_control6 AD_control7 AD_control8)
+
+module load star/2.7.11b
+module load samtools/1.15.1
+
+mkdir /path/to/output/directory/${PARAMS[$PBS_ARRAY_INDEX]}/star_fusion
+cd /path/to/directory/STAR-Fusion  ## directory containing STAR-fusion ##
+
+/path/to/directory/STAR-Fusion/STAR-Fusion --genome_lib_dir /path/to/directory/STAR-Fusion/GRCh38_gencode_v44_CTAT_lib_Oct292023.plug-n-play/ctat_genome_lib_build_dir/ --left_fq /path/to/directory/${PARAMS[$PBS_ARRAY_INDEX]}_1_paired.fastq.gz  --right_fq /path/to/directory/${PARAMS[$PBS_ARRAY_INDEX]}_2_paired.fastq.gz --output_dir /path/to/output/directory*/${PARAMS[$PBS_ARRAY_INDEX]}/star_fusion
