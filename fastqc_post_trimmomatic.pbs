@@ -1,0 +1,20 @@
+#!/bin/bash
+
+#PBS -N fastqc_AD_trimmed
+#PBS -l select=1:ncpus=4:mem=50gb,walltime=02:59:00
+#PBS -j oe
+#PBS -M user@email.com
+#PBS -m ae
+#PBS -J 0-16
+
+PARAMS=(AD1 AD2 AD3 AD4 AD5 AD6 AD7 AD8 AD9 AD_control1 AD_control2 AD_control3 AD_control4 AD_control5 AD_control6 AD_control7 AD_control8)
+
+module load fastqc/0.11.9
+
+
+fastqc -t 19 /path/to/directory/${PARAMS[$PBS_ARRAY_INDEX]}_1_paired.fastq.gz /path/to/directory/${PARAMS[$PBS_ARRAY_INDEX]}_2_paired.fastq.gz -o /path/to/directory/${PARAMS[$PBS_ARRAY_INDEX]}
+
+cd /path/to/directory/${PARAMS[$PBS_ARRAY_INDEX]}
+
+unzip ${PARAMS[$PBS_ARRAY_INDEX]}_1_paired_fastqc.zip
+unzip ${PARAMS[$PBS_ARRAY_INDEX]}_2_paired_fastqc.zip
