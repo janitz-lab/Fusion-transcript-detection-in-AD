@@ -1,0 +1,27 @@
+#!/bin/bash
+
+#PBS -N Arriba_alignment_AD
+#PBS -l select=1:ncpus=16:mem=80gb,walltime=23:59:00
+#PBS -j oe
+#PBS -m ae
+#PBS -M user@email.com
+#PBS -J 0-8
+
+PARAMS=(AD1 AD2 AD3 AD4 AD5 AD6 AD7 AD8 AD9)  ## repeat seperately for control group ##
+
+module load star/2.7.11b
+module load samtools/1.15.1
+
+mkdir /path/to/output/directory/${PARAMS[$PBS_ARRAY_INDEX]}/arriba
+cd /path/to/output/directory/${PARAMS[$PBS_ARRAY_INDEX]}/arriba
+
+/path/to/directory/arriba_v2.5.1/run_arriba.sh /path/to/directory/arriba_v2.5.1/STAR_index_hg38_GENCODE38 /path/to/directory/arriba_v2.5.1/GENCODE38.gtf /path/to/directory/arriba_v2.5.1/hg38.fa /path/to/directory/arriba_v2.5.1/database/blacklist_hg38_GRCh38_v2.5.1.tsv.gz /path/to/directory/arriba_v2.5.1/database/known_fusions_hg38_GRCh38_v2.5.1.tsv.gz /path/to/directory/arriba_v2.5.1/database/protein_domains_hg38_GRCh38_v2.5.1.gff3 8 /path/to/directory/${PARAMS[$PBS_ARRAY_INDEX]}_1_paired.fastq.gz /path/to/directory/${PARAMS[$PBS_ARRAY_INDEX]}_2_paired.fastq.gz
+
+mv /path/to/output/directory/${PARAMS[$PBS_ARRAY_INDEX]}/arriba/fusions.tsv /path/to/output/directory/arriba/${PARAMS[$PBS_ARRAY_INDEX]}_fusions.tsv
+
+rm -r _STARtmp/ && rm fusions.discarded.tsv && rm Log.progress.out && rm SJ.out.tab 
+
+
+
+
+
