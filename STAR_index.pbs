@@ -1,0 +1,18 @@
+#!/bin/bash
+
+#PBS -N hs_STAR_index
+#PBS -l select=1:ncpus=16:mem=100gb,walltime=23:59:00
+#PBS -j oe
+#PBS -M user@email.com
+#PBS -m ae
+
+module load star/2.7.11b 
+
+STAR --runThreadN 16 --runMode genomeGenerate --genomeDir /path/to/directory/Homo_sapiens/UCSC/hg38/Sequence/STAR_index --genomeFastaFiles /path/to/directory/Homo_sapiens/UCSC/hg38/Sequence/WholeGenomeFasta/genome.fa
+
+
+
+## prior to running script for STAR index, USCS hg38 FASTA file must be downloaded using the following line ##
+
+wget --no-check-certificate \
+https://igenomes.illumina.com.s3.amazonaws.com/Homo_sapiens/UCSC/hg38/Homo_sapiens_UCSC_hg38.tar.gz
