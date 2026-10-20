@@ -1,0 +1,41 @@
+### Run seperately for AD and control groups on Rstudio for all unfiltered fusions detected acrsso JAFFA, Arriba and STAR-fusion ###
+
+install.packages("VennDiagram")
+library(VennDiagram)
+library(grid)
+
+install.packages("ggVennDiagram")
+
+install.packages("ggplot2")
+library(ggVennDiagram)
+library(ggplot2)
+
+# 1. Read the data files (adjust the file paths/names to match yours)
+# 'stringsAsFactors = FALSE' ensures R reads them as text, keeping the pairs intact.
+data1 <- read.table("AD_control_arriba_pairs.txt", stringsAsFactors = FALSE, header = FALSE)
+data2 <- read.table("AD_control_all_jaffa_pairs.txt", stringsAsFactors = FALSE, header = FALSE)
+data3 <- read.table("AD_control_star_pairs.txt", stringsAsFactors = FALSE, header = FALSE)
+
+# 2. Extract the fusion strings into character vectors and clean any accidental spacing
+set1 <- trimws(data1$V1)
+set2 <- trimws(data2$V1)
+set3 <- trimws(data3$V1)
+
+# 3. Combine them into the named list required for the Venn Diagram
+fusion_data <- list(
+  Arriba = set1,
+  JAFFA = set2,
+  "STAR fusion" = set3
+)
+
+# Plot the Venn Diagram
+ggVennDiagram(fusion_data) +
+  scale_fill_gradient(low = "#C1FFC1", high = "#FFB6C1") +
+  labs(title = "Overlap of Gene Fusions Across 3 control Datasets")
+
+# Extract the list of items in every intersection segment
+overlaps <- process_region_data(Venn(fusion_data))
+
+# Print the specific fusions that overlap across all three datasets (Dataset_A, Dataset_B, and Dataset_C)
+# (Look for the row where 'item' matches the intersection of all three groups)
+print(overlaps)
