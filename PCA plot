@@ -1,0 +1,66 @@
+## PCA plot of featurecounts with R ##
+
+install.packages("BiocManager")
+BiocManager::install("DESeq2")
+install.packages("ggplot2")
+
+library(DESeq2)
+library(ggplot2)
+
+setwd("/path/to/directory/")  ## location on local drive containing featurecounts for AD and AD_control ##
+
+ad <- read.table("AD_gene_counts.txt", header = TRUE, row.names = 1, check.names = FALSE)
+control <- read.table("AD_control_gene_counts.txt", header = TRUE, row.names = 1, check.names = FALSE)
+
+
+ad_counts <- ad[, 6:ncol(ad)]
+control_counts <- control[, 6:ncol(control)]
+
+
+colnames(ad_counts) <- paste0("AD_", colnames(ad_counts))
+colnames(control_counts) <- paste0("CTRL_", colnames(control_counts))
+
+
+common_genes <- intersect(rownames(ad_counts), rownames(control_counts))
+
+ad_counts <- ad_counts[common_genes, ]
+control_counts <- control_counts[common_genes, ]
+
+
+count_matrix <- cbind(ad_counts, control_counts)
+
+
+condition <- factor(c(rep("AD", ncol(ad_counts)),
+                      rep("AD_control", ncol(control_counts))))
+
+coldata <- data.frame(
+  row.names = colnames(count_matrix),
+  condition = condition
+)
+
+
+dds <- DESeqDataSetFromMatrix(
+  countData = count_matrix,
+  colData = coldata,
+  design = ~ condition
+)
+
+
+dds <- dds[rowSums(counts(dds)) > 10, ]
+
+
+vsd <- vst(dds, blind = TRUE)
+
+
+pca_data <- plotPCA(vsd, intgroup = "condition", returnData = TRUE)
+
+percentVar <- round(100 * attr(pca_data, "percentVar"))
+
+
+ggplot(pca_data, aes(PC1, PC2, color = condition, shape = condition)) +
+  geom_point(size = 4) +
+  scale_shape_manual(values = c(16, 15)) +  # AD = circle, Control = square
+  xlab(paste0("PC1: ", percentVar[1], "% variance")) +
+  ylab(paste0("PC2: ", percentVar[2], "% variance")) +
+  ggtitle("PCA: AD vs control") +
+  theme_minimal()
