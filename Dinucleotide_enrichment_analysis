@@ -1,0 +1,194 @@
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(pheatmap)   
+  library(grid)
+  library(ggplot2)
+})
+setwd("/path/to/file/location/")
+# ---- Input ----
+df <- readr::read_csv("dinucleotide_fusion_file.csv")
+
+# ---- Extract junction dinucleotide ----
+df <- df %>%
+  mutate(
+    left_last   = substr(left_seq, nchar(left_seq), nchar(left_seq)),
+    right_first = substr(right_seq, 1, 1),
+    junction_dinuc = toupper(paste0(left_last, right_first))
+  )
+
+# Custom column order (all 16)
+ordered_dinucs <- c("GG","GC","GA","GT",
+                    "CC","CG","CA","CT",
+                    "AA","AG","AC","AT",
+                    "TT","TG","TC","TA")
+
+# Row order (lowercase types + pooled)
+ordered_types <- c("AD","AD_control","common_fusions")
+
+# Label mapping for display
+label_map <- c("AD"="AD", "AD_control"="AD_control", "common_fusions"="common_fusions") #This is changed depending on what you want as your labels e.g. tissue/disease
+
+# ---- Observed counts ----
+obs <- df %>%
+  count(sample_group, junction_dinuc, name="obs") %>%
+  complete(sample_group, junction_dinuc = ordered_dinucs, fill=list(obs=0))
+
+# ---- Background frequencies ----
+count_dinucs_in_string <- function(s) {
+  s <- toupper(gsub("[^ACGT]", "", s))
+  if (nchar(s) < 2) return(tibble(dinuc = ordered_dinucs, bg_count = 0))
+  vec <- substring(s, 1:(nchar(s)-1), 2:nchar(s))
+  tibble(dinuc = vec) %>%
+    count(dinuc, name="bg_count") %>%
+    complete(dinuc = ordered_dinucs, fill=list(bg_count=0))
+}
+
+bg_by_type <- df %>%
+  group_by(sample_group) %>%
+  summarize(
+    flanks_concat = paste0(paste(left_seq, collapse=""),
+                           paste(right_seq, collapse="")),
+    .groups="drop"
+  ) %>%
+  mutate(dinuc_tbl = map(flanks_concat, count_dinucs_in_string)) %>%
+  select(-flanks_concat) %>%
+  unnest(dinuc_tbl) %>%
+  group_by(sample_group) %>%
+  mutate(bg_freq = bg_count / sum(bg_count)) %>%
+  ungroup()
+
+# ---- Add pooled "all" ----
+df_all <- df %>% mutate(sample_group = "all")
+obs_all <- df_all %>%
+  count(sample_group, junction_dinuc, name="obs") %>%
+  complete(sample_group, junction_dinuc = ordered_dinucs, fill=list(obs=0))
+obs <- bind_rows(obs, obs_all)
+
+bg_all <- df_all %>%
+  summarize(flanks_concat = paste0(paste(left_seq, collapse=""),
+                                   paste(right_seq, collapse="")),
+            .groups="drop") %>%
+  mutate(dinuc_tbl = map(flanks_concat, count_dinucs_in_string)) %>%
+  select(-flanks_concat) %>%
+  unnest(dinuc_tbl) %>%
+  mutate(bg_freq = bg_count / sum(bg_count),
+         sample_group = "all")
+
+bg_by_type <- bind_rows(bg_by_type, bg_all)
+
+# ---- Stats + heatmap matrix ----
+results <- list()
+heat_rows <- list()
+
+for (ct in unique(obs$sample_group)) {
+  obs_vec <- obs %>% filter(sample_group == ct) %>%
+    arrange(match(junction_dinuc, ordered_dinucs))
+  n <- sum(obs_vec$obs)
+  
+  bg_vec <- bg_by_type %>% filter(sample_group == ct) %>%
+    arrange(match(dinuc, ordered_dinucs))
+  exp <- pmax(bg_vec$bg_freq * n, 1e-9)
+  
+  # Chi-square test
+  chisq_p <- suppressWarnings(
+    chisq.test(x = obs_vec$obs, p = bg_vec$bg_freq, rescale.p = TRUE)$p.value
+  )
+  
+  # Targeted binomial tests for GC, GG, CG, CC
+  targeted <- map_dfr(c("GC","GG","CG","CC","GT"), function(d) {
+    k <- obs_vec$obs[obs_vec$junction_dinuc == d]
+    p0 <- bg_vec$bg_freq[bg_vec$dinuc == d]
+    bt <- binom.test(k, n, p0, alternative="greater")
+    tibble(
+      dinuc=d, obs=k, exp=p0*n,
+      p=bt$p.value,
+      log2enr=log2((k+0.5)/(p0*n+0.5))
+    )
+  })
+  
+  results[[ct]] <- tibble(
+    sample_group=ct,
+    total_fusions=n,
+    chisq_p=chisq_p
+  ) %>%
+    bind_cols(targeted %>% pivot_wider(
+      names_from=dinuc, values_from=c(obs,exp,p,log2enr),
+      names_sep="_"
+    ))
+  
+  log2enr_all <- log2((obs_vec$obs+0.5)/(exp+0.5))
+  heat_rows[[ct]] <- tibble(sample_group=ct) %>%
+    bind_cols(set_names(as.list(log2enr_all), ordered_dinucs))
+}
+
+# Combine results + adjust p-values
+res_tab <- bind_rows(results)
+pcols <- grep("^p_", names(res_tab), value=TRUE)
+res_tab[paste0(pcols,"_fdr")] <- lapply(res_tab[pcols], p.adjust, method="BH")
+readr::write_csv(res_tab, "dinuc_stats_by_sample_group.csv")
+
+# ---- Heatmap matrix ----
+heat <- bind_rows(heat_rows) %>%
+  filter(sample_group %in% ordered_types) %>%
+  arrange(factor(sample_group, levels=ordered_types)) %>%
+  column_to_rownames("sample_group") %>%
+  as.matrix()
+
+heat <- heat[, ordered_dinucs]
+heat[is.na(heat)] <- 0
+rownames(heat) <- recode(rownames(heat), !!!label_map)
+
+#
+# ---- GGPlot Heatmap (publication style, no clipping) ----
+#
+
+hm_df <- as.data.frame(heat) %>%
+  tibble::rownames_to_column("SampleType") %>%
+  tidyr::pivot_longer(-SampleType, names_to="Dinuc", values_to="log2enr")
+
+hm_df$SampleType <- factor(hm_df$SampleType, levels = rownames(heat))
+hm_df$Dinuc      <- factor(hm_df$Dinuc,      levels = colnames(heat))
+
+abs_max <- ceiling(max(abs(hm_df$log2enr), na.rm = TRUE))
+tick_vals <- pretty(c(-abs_max, abs_max), n = 5)
+
+p <- ggplot(hm_df, aes(Dinuc, SampleType, fill = log2enr)) +
+  geom_tile() +
+  coord_equal() +
+  scale_fill_gradient2(
+    low = "blue", mid = "white", high = "red",
+    midpoint = 0, limits = c(-abs_max, abs_max),
+    breaks = tick_vals, labels = tick_vals,
+    name = "log2 Enrichment"
+  ) +
+  labs(title = "Fusion junction dinucleotide enrichment", x = NULL, y = NULL) +
+  theme_minimal(base_size = 16) +
+  theme(
+    panel.grid = element_blank(),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    legend.position = "bottom",
+    legend.direction = "horizontal",
+    legend.title = element_text(size = 13),
+    legend.text  = element_text(size = 12),
+    plot.margin = margin(12, 16, 16, 12)
+  ) +
+  guides(fill = guide_colorbar(
+    title.position = "top",
+    title.hjust = 0.5,
+    ticks = TRUE,
+    ticks.colour = "black",
+    barwidth = unit(10, "cm"),
+    barheight = unit(0.5, "cm")
+  ))
+
+# Dynamically scale figure size
+tile_in <- 0.6
+w_in <- ncol(heat) * tile_in + 4.0
+h_in <- nrow(heat) * tile_in + 3.5
+
+# Save outputs
+ggsave("fusion_dinuc_heatmap.pdf", p, device = cairo_pdf, width = w_in, height = h_in, units = "in")
+ggsave("fusion_dinuc_heatmap.png", p, width = w_in, height = h_in, units = "in", dpi = 300)
+
+message("Results saved: dinuc_stats_by_sample_group.csv, fusion_dinuc_heatmap.pdf, fusion_dinuc_heatmap.png")
