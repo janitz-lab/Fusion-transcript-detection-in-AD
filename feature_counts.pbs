@@ -1,0 +1,16 @@
+#!/bin/bash
+
+#PBS -N featurecount
+#PBS -l select=1:ncpus=8:mem=40gb,walltime=6:00:00
+#PBS -j oe
+#PBS -M z5371607@ad.unsw.edu.au
+#PBS -m ae
+#PBS -J 0-1
+
+PARAMS=(AD AD_control)
+
+module load subread/2.0.2
+
+cd /path/to/directory/${PARAMS[$PBS_ARRAY_INDEX]}
+
+featureCounts -T 8 -t exon -g gene_id -a /path/to/directory/Homo_sapiens/gencode.v49.annotation.gtf -s 2 -p -B -o gene_counts.txt */*StarAligned.sortedByCoord.out.bam
