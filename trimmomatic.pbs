@@ -1,0 +1,16 @@
+#!/bin/bash
+
+#PBS -N fastqc_samplename
+#PBS -l select=1:ncpus=16:mem=80gb,walltime=02:59:00
+#PBS -j oe
+#PBS -M user@email.com
+#PBS -m ae
+#PBS -J 0-16
+
+PARAMS=(AD1 AD2 AD3 AD4 AD5 AD6 AD7 AD8 AD9 AD_control1 AD_control2 AD_control3 AD_control4 AD_control5 AD_control6 AD_control7 AD_control8)
+
+module load trimmomatic/0.39
+
+cd /path/to/directory
+
+trimmomatic PE ./${PARAMS[$PBS_ARRAY_INDEX]}_1.fastq.gz ./${PARAMS[$PBS_ARRAY_INDEX]}_2.fastq.gz ./${PARAMS[$PBS_ARRAY_INDEX]}_1_paired.fastq.gz ./${PARAMS[$PBS_ARRAY_INDEX]}_1_unpaired.fastq.gz ./${PARAMS[$PBS_ARRAY_INDEX]}_2_paired.fastq.gz ./${PARAMS[$PBS_ARRAY_INDEX]}_2_unpaired.fastq.gz ILLUMINACLIP:/apps/trimmomatic/0.39/adapters/TruSeq3-PE.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36
